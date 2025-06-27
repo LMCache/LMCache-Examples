@@ -1,0 +1,16 @@
+--- a/vllm/v1/worker/gpu_worker.py
++++ b/vllm/v1/worker/gpu_worker.py
+@@ def init_worker_distributed_environment(self):
+-        ensure_kv_transfer_initialized(vllm_config)
++        ensure_model_parallel_initialized(parallel_config.tensor_parallel_size,
++                                      parallel_config.pipeline_parallel_size)
++
++        # ensure_kv_transfer_initialized(vllm_config)
+
+@@ def load_model(self, *args, **kwargs):
+-        # (end of existing load_model body)
++        # --- LMCache integration hook ---
++        from lmcache.v1.compute.models.utils import VLLMModelTracker
++        from lmcache.integration.vllm.utils import ENGINE_NAME
++        VLLMModelTracker.register_model(ENGINE_NAME, self.model_runner.model)
++        ensure_kv_transfer_initialized(self.vllm_config)
