@@ -1,5 +1,7 @@
 # KV Cache Blending Demo w/ Chat UI
 
+![Demo Animation](demo.gif)
+
 ## Overview
 
 This project demonstrates the benefits of LMCache's Key-Value (KV) cache blending feature for Large Language Models (LLMs) using vLLM. It provides a side-by-side chat interface to compare the performance of a vLLM instance with CacheBlend enabled against a standard vLLM instance.
