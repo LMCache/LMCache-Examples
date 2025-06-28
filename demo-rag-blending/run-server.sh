@@ -95,6 +95,7 @@ sudo docker run -d \
   --gpu-memory-utilization 0.9 \
   --max-model-len 30000 \
   --no-enable-prefix-caching \
+  --max-num-batched-tokens 20480 \
   --port "${HOST_PORT_LMCACHE}" \
   --kv-transfer-config '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
 #   --lmcache-config-file "${LM_CACHE_CONFIG_FILE}"
