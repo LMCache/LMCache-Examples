@@ -1,77 +1,90 @@
-from openai import OpenAI
-import threading
-import sys
-from io import StringIO
-import time
+import threading, time, requests
 from transformers import AutoTokenizer
-import json
-import pdb
+
+MODEL_NAME          = "mistralai/Mistral-7B-Instruct-v0.2"
+BLEND_SPECIAL_STR   = " # # "
+
+_tokenizer = None
+_tok_lock  = threading.Lock()
+
+def get_tokenizer():
+    global _tokenizer
+    with _tok_lock:
+        if _tokenizer is None:
+            _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        return _tokenizer
+
 
 class ChatSession:
-    def __init__(self, port):
-        openai_api_key = "EMPTY"
-        openai_api_base = f"http://localhost:{port}/v1"
+    """
+    Talks to FastAPI `/generate`.
+    Streams two chunks:
+        • generated text
+        • metrics block  (server gen_time, round-trip, overhead)
+    """
 
-        self.client = client = OpenAI(
-            # defaults to os.environ.get("OPENAI_API_KEY")
-            api_key=openai_api_key,
-            base_url=openai_api_base,
-        )
-
-        models = client.models.list()
-        self.model = models.data[0].id
-
-        self.messages = [
-
-        ]
-
-        self.final_context = ""
-        self.separator = f" # # "
+    def __init__(self, port: int, blend_special_str: str = BLEND_SPECIAL_STR):
+        tok             = get_tokenizer()
+        self.sep_ids    = tok.encode(blend_special_str)[1:]  
         self.temperature = 0.0
+        self.context_ids = []
+        self.context = ""                                 
+        self.url         = f"http://localhost:{port}/generate"
 
     def set_context(self, context_list):
-        input_prompt = ""
-        for context in context_list:
-            input_prompt +=(self.separator + context)
-        self.final_context = input_prompt
-        self.messages.append({"role":"user", "content":input_prompt})
+        tok = get_tokenizer()
+        if not context_list:
+            self.context_ids = []
+            return
+        
+        # build context string
+        self.context = context_list[0]
+        for chunk in context_list[1:]:
+            self.context += BLEND_SPECIAL_STR + chunk
+
+        ids = tok.encode(context_list[0])            
+        for chunk in context_list[1:]:
+            ids += self.sep_ids + tok.encode(chunk)[1:] 
+        self.context_ids = ids
 
     def get_context(self):
-        return self.final_context
+        return self.context
 
-    def on_user_message(self, message, display=True):
-        if display:
-            print("User message:", message)
-        self.messages.append({"role": "user", "content": message})
-
-    def on_server_message(self, message, display=True):
-        if display:
-            print("Server message:", message)
-        self.messages.append({"role": "assistant", "content": message})
-
-    def chat(self,question):
-        #self.on_user_message(question)
-        self.messages[0]["content"] = self.messages[0]["content"] + self.separator + question
-        start = time.perf_counter()
-        end = None
-        # print(f"messages: {self.messages}")
-        chat_completion = self.client.chat.completions.create(
-            messages=self.messages,
-            model=self.model,
-            temperature=self.temperature,
-            stream=True,
-            #stop=['\n']
+    def chat(self, question: str):
+        tok = get_tokenizer()
+        prompt_ids = (
+            self.context_ids +
+            self.sep_ids +
+            tok.encode(question)[1:]          # drop BOS
         )
 
-        output_buffer = StringIO()
-        server_message = []
-        for chunk in chat_completion:
-            chunk_message = chunk.choices[0].delta.content
-            if chunk_message is not None:
-                if end is None:
-                    end = time.perf_counter()
-                yield chunk_message
-                server_message.append(chunk_message)
+        payload = {
+            "prompt": prompt_ids,
+            "temperature": self.temperature,
+            "top_p": 0.95,
+            "max_tokens": 1,
+            "req_str": "chat",
+        }
 
-        #self.on_server_message("".join(server_message))
-        yield f"\n\n(Response delay: {end - start:.2f} seconds)"
+        t0 = time.time()
+        r  = requests.post(self.url, json=payload, timeout=120)
+        t1 = time.time()
+
+        r.raise_for_status()
+        data = r.json()
+
+        gen_time   = data.get("generation_time", 0.0)
+        total_time = t1 - t0
+        overhead   = total_time - gen_time
+        text       = data.get("texts", [""])[0]
+
+        print("-" * 60)
+        print(f"Request 'chat'")
+        print(f"Generated text          : {text!r}")
+        print(f"Server generation_time  : {gen_time:.2f} s")
+        print(f"Client round-trip time  : {total_time:.2f} s")
+        print(f"⇢ Network / overhead    : {overhead:.2f} s")
+        print("-" * 60, flush=True)
+
+        yield text
+        yield f"\n\n(TTFT: {gen_time:.2f} s)" 
