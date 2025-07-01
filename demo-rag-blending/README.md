@@ -93,7 +93,7 @@ demo-rag-blending/
 
 4.  **Install Frontend Dependencies:**
     ```bash
-    pip install -r frontend/requirements.txt
+    pip install -r requirements.txt
     ```
 
 5.  **Run the Streamlit Frontend:**
