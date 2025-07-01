@@ -91,6 +91,11 @@ demo-rag-blending/
            -d '{"prompt": "What is the capital of France?", "max_tokens": 12, "req_str": "demo"}'
       ```
 
+4.  **Install Frontend Dependencies:**
+    ```bash
+    pip install -r frontend/requirements.txt
+    ```
+
 5.  **Run the Streamlit Frontend:**
     Once the backend servers are ready:
     ```bash
