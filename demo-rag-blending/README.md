@@ -1,5 +1,7 @@
 # KV Cache Blending Demo w/ Chat UI
 
+![illustration](cacheblend.jpg)
+
 ![Demo Animation](demo.gif)
 
 ## Overview
